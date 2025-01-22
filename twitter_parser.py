@@ -1,6 +1,7 @@
 import logging
 import time
 import pickle
+import pandas as pd
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
@@ -10,7 +11,7 @@ from selenium.webdriver.support import expected_conditions as EC
 
 logging.basicConfig(level=logging.INFO)
 
-def collect_tweets(query, target_date, tweet_count):
+def collect_tweets(query, target_date, max_tweets):
     driver_path = 'chromedriver.exe'
     service = Service(executable_path=driver_path)
     chrome_options = Options()
@@ -18,6 +19,7 @@ def collect_tweets(query, target_date, tweet_count):
     driver = webdriver.Chrome(service=service, options=chrome_options)
 
     tweets_data = []
+
     try:
         logging.info("Открытие главной страницы Twitter...")
         driver.get("https://x.com")
@@ -42,24 +44,32 @@ def collect_tweets(query, target_date, tweet_count):
         latest_tab.click()
         time.sleep(3)
 
-        while len(tweets_data) < tweet_count:
+        collected_count = 0
+        while collected_count < max_tweets:
             tweet_elements = driver.find_elements(By.CSS_SELECTOR, 'article')
-            logging.info(f"Найдено {len(tweet_elements)} твитов.")
+            logging.info(f"Найдено {len(tweet_elements)} твитов. Собрано: {collected_count}/{max_tweets}")
 
             for tweet_element in tweet_elements:
-                if len(tweets_data) >= tweet_count:
-                    break
                 try:
                     date = tweet_element.find_element(By.CSS_SELECTOR, 'time').get_attribute('datetime')
                     if date.split("T")[0] > target_date:
                         continue
                     elif date.split("T")[0] < target_date:
+                        logging.info(f"Достигнуты твиты за более раннюю дату ({date.split('T')[0]}). Остановка.")
+                        driver.quit()
+                        save_to_csv(tweets_data, 'collected_tweets.csv')
                         return tweets_data
 
                     text = tweet_element.find_element(By.CSS_SELECTOR, 'div[lang]').text
                     user = tweet_element.find_element(By.CSS_SELECTOR, 'div[dir="ltr"] span').text
                     tweets_data.append({'tweet': text, 'user': user, 'date': date})
+                    collected_count += 1
+
                     logging.info(f"Собраны данные для твита: {{'tweet': {text}, 'user': {user}, 'date': {date}}}")
+
+                    if collected_count >= max_tweets:
+                        break
+
                 except Exception as e:
                     logging.error(f"Ошибка при обработке твита: {e}")
                     continue
@@ -70,5 +80,16 @@ def collect_tweets(query, target_date, tweet_count):
 
     finally:
         driver.quit()
-        logging.info(f"Закрытие веб-драйвера. Собрано твитов: {len(tweets_data)}")
-        return tweets_data
+        save_to_csv(tweets_data, 'collected_tweets.csv')
+        logging.info("Закрытие веб-драйвера.")
+
+    return tweets_data
+
+
+def save_to_csv(data, file_path):
+    if data:
+        df = pd.DataFrame(data)
+        df.to_csv(file_path, index=False, encoding="utf-8-sig")
+        logging.info(f"Сохранено {len(data)} твитов в файл {file_path}.")
+    else:
+        logging.info("Нет данных для сохранения.")

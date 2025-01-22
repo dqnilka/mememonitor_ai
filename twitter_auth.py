@@ -6,7 +6,7 @@ import pickle
 
 def twitter_login():
     driver_path = "chromedriver.exe"  
-    auth_token = ""  
+    auth_token = "0d03ffb70d0fc39ffd7d0bc8c23e44b29fe5c59c"  
 
     service = Service(executable_path=driver_path)
     chrome_options = Options()
