@@ -36,10 +36,10 @@ class SentimentDataset(Dataset):
             "labels": torch.tensor(label, dtype=torch.long),
         }
 
+
 def prepare_data(file_path, max_len=128):
     logging.info("Чтение данных из файла: %s", file_path)
     data = pd.read_csv(file_path)
-
     data["sentiment"] = data["sentiment"].map({
         "positive": 0,
         "negative": 1,
@@ -60,32 +60,39 @@ def prepare_data(file_path, max_len=128):
     logging.info("Данные подготовлены.")
     return train_dataset, val_dataset, tokenizer
 
+
 def train_model(train_dataset, val_dataset, tokenizer, model_path):
     logging.info("Инициализация модели...")
     model = BertForSequenceClassification.from_pretrained("bert-base-uncased", num_labels=4)
 
     log_dir = "./logs"
-    os.makedirs(log_dir, exist_ok=True)
+    if os.path.exists(log_dir):
+        if not os.path.isdir(log_dir):
+            os.remove(log_dir)  
+            os.makedirs(log_dir)  
+    else:
+        os.makedirs(log_dir)
+    logging.info("Директория %s уже существует.", log_dir)
+
+    data_collator = DataCollatorWithPadding(tokenizer=tokenizer)
 
     training_args = TrainingArguments(
         output_dir="./results",
-        eval_strategy="steps",
+        eval_strategy="steps", 
         save_strategy="steps",
         save_steps=500,
         eval_steps=500,
         load_best_model_at_end=True,
-        per_device_train_batch_size=16,
-        per_device_eval_batch_size=16,
+        per_device_train_batch_size=8,  
+        per_device_eval_batch_size=8,
         num_train_epochs=3,
         logging_dir=log_dir,
         logging_steps=100,
         save_total_limit=1,
-        fp16=torch.cuda.is_available(),
+        report_to="none",  
     )
 
     logging.info("Инициализация Trainer...")
-    data_collator = DataCollatorWithPadding(tokenizer=tokenizer)
-
     trainer = Trainer(
         model=model,
         args=training_args,
@@ -98,16 +105,15 @@ def train_model(train_dataset, val_dataset, tokenizer, model_path):
     trainer.train()
     model.save_pretrained(model_path)
     tokenizer.save_pretrained(model_path)
-    logging.info("Обучение завершено.")
+    logging.info("Модель успешно обучена и сохранена в %s", model_path)
 
-def predict_sentiment(text, model_path):
-    tokenizer = BertTokenizer.from_pretrained(model_path)
-    model = BertForSequenceClassification.from_pretrained(model_path)
 
-    inputs = tokenizer(text, return_tensors="pt", truncation=True, padding=True, max_length=512)
-    outputs = model(**inputs)
-    probs = torch.nn.functional.softmax(outputs.logits, dim=-1)
-    sentiment = torch.argmax(probs).item()
+if __name__ == "__main__":
+    DATA_PATH = "normalized_tweets.csv"  
+    MODEL_PATH = "./bert_sentiment_model"
 
-    categories = ["positive", "negative", "raid", "mention"]
-    return categories[sentiment]
+    logging.info("Подготовка данных...")
+    train_dataset, val_dataset, tokenizer = prepare_data(DATA_PATH)
+
+    logging.info("Обучение модели...")
+    train_model(train_dataset, val_dataset, tokenizer, MODEL_PATH)

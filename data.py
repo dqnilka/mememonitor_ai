@@ -4,7 +4,6 @@ from sklearn.model_selection import train_test_split
 from torch.utils.data import Dataset
 from transformers import BertTokenizer
 
-
 class SentimentDataset(Dataset):
     def __init__(self, texts, labels, tokenizer, max_len):
         self.texts = texts
